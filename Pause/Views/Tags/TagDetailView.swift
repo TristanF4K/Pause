@@ -1,0 +1,227 @@
+//
+//  TagDetailView.swift
+//  Pause.
+//
+//  Created by Tristan Srebot on 04.01.26.
+//
+
+import SwiftUI
+import FamilyControls
+
+struct TagDetailView: View {
+    let tag: NFCTag
+    
+    @StateObject private var appState = AppState.shared
+    @StateObject private var selectionManager = SelectionManager.shared
+    @State private var editedName: String
+    @State private var showingAppPicker = false
+    @State private var isEditing = false
+    @State private var selection: FamilyActivitySelection
+    @Environment(\.colorScheme) var colorScheme
+    
+    init(tag: NFCTag) {
+        self.tag = tag
+        _editedName = State(initialValue: tag.name)
+        
+        // Load existing selection if available
+        let existingSelection = SelectionManager.shared.getSelection(for: tag.id) ?? FamilyActivitySelection()
+        _selection = State(initialValue: existingSelection)
+    }
+    
+    var body: some View {
+        ZStack {
+            PauseColors.background
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: Spacing.lg) {
+                    // Tag Info Card
+                    tagInfoCard
+                    
+                    // App Selection Card
+                    appSelectionCard
+                }
+                .padding(Spacing.lg)
+            }
+        }
+        .navigationTitle(tag.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(isEditing ? "Fertig" : "Bearbeiten") {
+                    if isEditing {
+                        saveChanges()
+                    }
+                    isEditing.toggle()
+                }
+                .foregroundColor(PauseColors.accent)
+            }
+        }
+        .familyActivityPicker(
+            isPresented: $showingAppPicker,
+            selection: $selection
+        )
+        .onChange(of: selection) { oldValue, newValue in
+            // Save selection when it changes
+            saveAppSelection(newValue)
+        }
+        .preferredColorScheme(.dark)
+    }
+    
+    // MARK: - Subviews
+    
+    private var tagInfoCard: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: FontSize.lg))
+                    .foregroundColor(PauseColors.accent)
+                Text("Tag-Info")
+                    .font(.system(size: FontSize.md, weight: .semibold))
+                    .foregroundColor(PauseColors.primaryText)
+                Spacer()
+            }
+            .padding(Spacing.lg)
+            
+            Divider()
+                .background(PauseColors.cardBorder)
+            
+            // Content
+            VStack(spacing: Spacing.md) {
+                // Name
+                HStack {
+                    Text("Name")
+                        .font(.system(size: FontSize.base))
+                        .foregroundColor(PauseColors.secondaryText)
+                    Spacer()
+                    if isEditing {
+                        TextField("Name", text: $editedName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        Text(tag.name)
+                            .font(.system(size: FontSize.base, weight: .medium))
+                            .foregroundColor(PauseColors.primaryText)
+                    }
+                }
+                
+                // Tag ID
+                HStack {
+                    Text("Tag-ID")
+                        .font(.system(size: FontSize.base))
+                        .foregroundColor(PauseColors.secondaryText)
+                    Spacer()
+                    Text(formatTagID(tag.tagIdentifier))
+                        .font(.system(size: FontSize.sm, design: .monospaced))
+                        .foregroundColor(PauseColors.tertiaryText)
+                }
+                
+                // Status
+                HStack {
+                    Text("Status")
+                        .font(.system(size: FontSize.base))
+                        .foregroundColor(PauseColors.secondaryText)
+                    Spacer()
+                    HStack(spacing: Spacing.xs) {
+                        Circle()
+                            .fill(tag.isActive ? PauseColors.success : PauseColors.dimGray)
+                            .frame(width: 8, height: 8)
+                        Text(tag.isActive ? "Aktiv" : "Inaktiv")
+                            .font(.system(size: FontSize.base, weight: .medium))
+                            .foregroundColor(tag.isActive ? PauseColors.success : PauseColors.dimGray)
+                    }
+                }
+            }
+            .padding(Spacing.lg)
+        }
+        .card()
+    }
+    
+    private var appSelectionCard: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.system(size: FontSize.lg))
+                    .foregroundColor(PauseColors.accent)
+                Text("Blockierte Apps")
+                    .font(.system(size: FontSize.md, weight: .semibold))
+                    .foregroundColor(PauseColors.primaryText)
+                Spacer()
+            }
+            .padding(Spacing.lg)
+            
+            Divider()
+                .background(PauseColors.cardBorder)
+            
+            // Selection Button
+            Button(action: { showingAppPicker = true }) {
+                HStack {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text("Apps auswählen")
+                            .font(.system(size: FontSize.base, weight: .medium))
+                            .foregroundColor(PauseColors.primaryText)
+                        
+                        let info = selectionManager.selectionInfo(for: tag.id)
+                        if info.apps > 0 || info.categories > 0 {
+                            Text("\(info.apps) Apps, \(info.categories) Kategorien")
+                                .font(.system(size: FontSize.sm))
+                                .foregroundColor(PauseColors.secondaryText)
+                        } else {
+                            Text("Keine Apps ausgewählt")
+                                .font(.system(size: FontSize.sm))
+                                .foregroundColor(PauseColors.tertiaryText)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: FontSize.base))
+                        .foregroundColor(PauseColors.dimGray)
+                }
+                .padding(Spacing.lg)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Footer
+            Text("Wähle die Apps aus, die bei Aktivierung dieses Tags blockiert werden sollen.")
+                .font(.system(size: FontSize.sm))
+                .foregroundColor(PauseColors.tertiaryText)
+                .padding(.horizontal, Spacing.lg)
+                .padding(.bottom, Spacing.lg)
+        }
+        .card()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func formatTagID(_ id: String) -> String {
+        if id.count > 12 {
+            return String(id.prefix(12)) + "..."
+        }
+        return id
+    }
+    
+    private func saveChanges() {
+        var updatedTag = tag
+        updatedTag.name = editedName
+        appState.updateTag(updatedTag)
+    }
+    
+    private func saveAppSelection(_ selection: FamilyActivitySelection) {
+        // Use TagController to properly save the selection
+        TagController.shared.linkAppsToTag(tag: tag, selection: selection)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        TagDetailView(tag: NFCTag(
+            name: "Schreibtisch",
+            tagIdentifier: "ABC123XYZ789",
+            linkedAppTokens: ["1", "2", "3"]
+        ))
+    }
+}
