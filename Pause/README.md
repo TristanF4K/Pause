@@ -4,7 +4,7 @@ Eine iOS App, die NFC-Tags nutzt, um Apps über Apples Screen Time API zu blocki
 
 ## Übersicht
 
-FocusLock ermöglicht es dir, deine Bildschirmzeit selbst zu kontrollieren, indem du NFC-Tags verwendest, um Apps zu blockieren oder zu entsperren. Tippe einfach dein iPhone an einen registrierten NFC-Tag, und die verknüpften Apps werden automatisch gesperrt oder freigegeben.
+Pause. ermöglicht es dir, deine Bildschirmzeit selbst zu kontrollieren, indem du NFC-Tags verwendest, um Apps zu blockieren oder zu entsperren. Tippe einfach dein iPhone an einen registrierten NFC-Tag, und die verknüpften Apps werden automatisch gesperrt oder freigegeben.
 
 ## Features
 

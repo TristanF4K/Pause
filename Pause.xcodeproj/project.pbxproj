@@ -44,14 +44,14 @@
 			path = Pause;
 			sourceTree = "<group>";
 		};
-		59B9926A2F0AAC9300AC248F /* BoredomTests */ = {
+		59B9926A2F0AAC9300AC248F /* PauseTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = BoredomTests;
+			path = PauseTests;
 			sourceTree = "<group>";
 		};
-		59B992742F0AAC9300AC248F /* BoredomUITests */ = {
+		59B992742F0AAC9300AC248F /* PauseUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = BoredomUITests;
+			path = PauseUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -88,8 +88,8 @@
 			isa = PBXGroup;
 			children = (
 				59B9925A2F0AAC9200AC248F /* Pause */,
-				59B9926A2F0AAC9300AC248F /* BoredomTests */,
-				59B992742F0AAC9300AC248F /* BoredomUITests */,
+				59B9926A2F0AAC9300AC248F /* PauseTests */,
+				59B992742F0AAC9300AC248F /* PauseUITests */,
 				59B992F02F0AB4CD00AC248F /* Frameworks */,
 				59B992592F0AAC9200AC248F /* Products */,
 			);
@@ -154,7 +154,7 @@
 				59B992692F0AAC9300AC248F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				59B9926A2F0AAC9300AC248F /* BoredomTests */,
+				59B9926A2F0AAC9300AC248F /* PauseTests */,
 			);
 			name = PauseTests;
 			packageProductDependencies = (
@@ -177,7 +177,7 @@
 				59B992732F0AAC9300AC248F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				59B992742F0AAC9300AC248F /* BoredomUITests */,
+				59B992742F0AAC9300AC248F /* PauseUITests */,
 			);
 			name = PauseUITests;
 			packageProductDependencies = (

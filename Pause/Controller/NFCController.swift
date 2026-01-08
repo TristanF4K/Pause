@@ -104,7 +104,7 @@ extension NFCController: NFCTagReaderSessionDelegate {
         
         // Connect to tag
         session.connect(to: tag) { error in
-            if let error = error {
+            if error != nil {
                 session.invalidate(errorMessage: "Verbindung fehlgeschlagen")
                 Task { @MainActor [weak self] in
                     self?.handleScanFailure(.readFailed)

@@ -1,6 +1,6 @@
 //
-//  BoredomUITests.swift
-//  BoredomUITests
+//  PauseUITests.swift
+//  PauseUITests
 //
 //  Created by Tristan Srebot on 04.01.26.
 //
