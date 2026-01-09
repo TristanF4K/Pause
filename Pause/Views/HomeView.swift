@@ -17,6 +17,7 @@ struct HomeView: View {
     @State private var successMessage = ""
     @State private var errorMessage = ""
     @State private var scannedTag: NFCTag?
+    @State private var showingAddTagView = false
     
     var body: some View {
         NavigationStack {
@@ -67,6 +68,9 @@ struct HomeView: View {
                 Button("OK") {}
             } message: {
                 Text(errorMessage)
+            }
+            .sheet(isPresented: $showingAddTagView) {
+                AddTagView()
             }
         }
     }
@@ -137,7 +141,7 @@ struct HomeView: View {
                     title: "Keine Tags",
                     message: "Füge deinen ersten NFC Tag hinzu, um zu beginnen.",
                     actionTitle: "Tag hinzufügen",
-                    action: { /* Navigation via TagListView */ }
+                    action: { showingAddTagView = true }
                 )
                 .padding(.horizontal, Spacing.lg)
             } else {
