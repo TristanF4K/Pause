@@ -9,6 +9,7 @@ import Foundation
 import Combine
 import FamilyControls
 import ManagedSettings
+import OSLog
 
 enum ScreenTimeError: Error, LocalizedError {
     case authorizationDenied
@@ -32,11 +33,15 @@ enum ScreenTimeError: Error, LocalizedError {
 
 @MainActor
 class ScreenTimeController: ObservableObject {
+    // DEPRECATED: Use Environment-based injection instead
+    // This will be removed in a future version
     static let shared = ScreenTimeController()
     
     private let store = ManagedSettingsStore()
     private let authCenter = AuthorizationCenter.shared
-    private let selectionManager = SelectionManager.shared
+    
+    // Injected dependencies
+    weak var selectionManager: SelectionManager?
     
     // Track current blocking state
     @Published private(set) var isCurrentlyBlocking = false
@@ -44,18 +49,20 @@ class ScreenTimeController: ObservableObject {
     @Published private(set) var isRequestingAuthorization = false
     @Published var lastAuthorizationStatus: AuthorizationStatus = .notDetermined
     
-    // UserDefaults keys for persistence
-    private let authorizationGrantedKey = "FocusLock_AuthorizationGranted"
-    private let lastSuccessfulAuthKey = "FocusLock_LastSuccessfulAuth"
-    private let blockingStateKey = "FocusLock_BlockingState"
-    private let activeTagKey = "FocusLock_ActiveTag"
-    
-    private init() {
+    // Public initializer for DI
+    init(selectionManager: SelectionManager? = nil) {
+        self.selectionManager = selectionManager
+        
         // Always start with completely clean main store
         store.clearAllSettings()
         
         loadPersistedState()
         checkAuthorizationStatusNow()
+    }
+    
+    // Legacy private init for .shared
+    private convenience init() {
+        self.init(selectionManager: nil)
     }
     
     var authorizationStatus: AuthorizationStatus {
@@ -66,18 +73,15 @@ class ScreenTimeController: ObservableObject {
     
     private func loadPersistedState() {
         // Load blocking state
-        isCurrentlyBlocking = UserDefaults.standard.bool(forKey: blockingStateKey)
+        isCurrentlyBlocking = UserDefaults.standard.blockingState
         
-        // Load active tag
-        if let tagString = UserDefaults.standard.string(forKey: activeTagKey),
-           let tagUUID = UUID(uuidString: tagString) {
-            activeTagID = tagUUID
-        }
+        // Load active source ID
+        activeTagID = UserDefaults.standard.activeSourceID
     }
     
     private func saveState() {
-        UserDefaults.standard.set(isCurrentlyBlocking, forKey: blockingStateKey)
-        UserDefaults.standard.set(activeTagID?.uuidString, forKey: activeTagKey)
+        UserDefaults.standard.blockingState = isCurrentlyBlocking
+        UserDefaults.standard.activeSourceID = activeTagID
     }
     
     private func checkAuthorizationStatusNow() {
@@ -86,8 +90,9 @@ class ScreenTimeController: ObservableObject {
         
         switch currentStatus {
         case .approved:
-            UserDefaults.standard.set(true, forKey: authorizationGrantedKey)
-            UserDefaults.standard.set(Date(), forKey: lastSuccessfulAuthKey)
+            UserDefaults.standard.authorizationGranted = true
+            UserDefaults.standard.lastSuccessfulAuth = Date()
+            UserDefaults.standard.hasBeenAuthorized = true
             
             // If we were blocking before app restart, try to restore the blocking state
             if isCurrentlyBlocking, let activeTag = activeTagID {
@@ -95,7 +100,8 @@ class ScreenTimeController: ObservableObject {
             }
             
         case .denied:
-            UserDefaults.standard.set(false, forKey: authorizationGrantedKey)
+            UserDefaults.standard.authorizationGranted = false
+            UserDefaults.standard.hasBeenAuthorized = false
             
         case .notDetermined:
             break
@@ -111,7 +117,9 @@ class ScreenTimeController: ObservableObject {
     }
     
     private func restoreBlockingState(for tagID: UUID) {
-        guard selectionManager.hasSelection(for: tagID) else {
+        let manager = selectionManager ?? SelectionManager.shared
+        
+        guard manager.hasSelection(for: tagID) else {
             isCurrentlyBlocking = false
             activeTagID = nil
             saveState()
@@ -119,7 +127,7 @@ class ScreenTimeController: ObservableObject {
         }
         
         // Use SelectionManager to restore blocking
-        selectionManager.activateBlocking(for: tagID)
+        manager.activateBlocking(for: tagID)
     }
     
     func requestAuthorization() async throws {
@@ -137,7 +145,7 @@ class ScreenTimeController: ObservableObject {
             checkAuthorizationStatusNow()
             
         } catch {
-            UserDefaults.standard.set(false, forKey: authorizationGrantedKey)
+            UserDefaults.standard.authorizationGranted = false
             throw ScreenTimeError.authorizationDenied
         }
     }
@@ -147,19 +155,19 @@ class ScreenTimeController: ObservableObject {
         
         switch currentStatus {
         case .approved:
-            UserDefaults.standard.set(true, forKey: authorizationGrantedKey)
-            UserDefaults.standard.set(Date(), forKey: lastSuccessfulAuthKey)
-            UserDefaults.standard.set(true, forKey: "FocusLock_HasBeenAuthorized")
+            UserDefaults.standard.authorizationGranted = true
+            UserDefaults.standard.lastSuccessfulAuth = Date()
+            UserDefaults.standard.hasBeenAuthorized = true
             return true
             
         case .denied:
-            UserDefaults.standard.set(false, forKey: authorizationGrantedKey)
-            UserDefaults.standard.set(false, forKey: "FocusLock_HasBeenAuthorized")
+            UserDefaults.standard.authorizationGranted = false
+            UserDefaults.standard.hasBeenAuthorized = false
             return false
             
         case .notDetermined:
             // Check if we've been authorized before
-            let hasBeenAuthorized = UserDefaults.standard.bool(forKey: "FocusLock_HasBeenAuthorized")
+            let hasBeenAuthorized = UserDefaults.standard.hasBeenAuthorized
             
             if hasBeenAuthorized {
                 // Try silent reauthorization first
@@ -193,18 +201,19 @@ class ScreenTimeController: ObservableObject {
     // MARK: - Blocking with FamilyActivitySelection
     
     func blockApps(for tagID: UUID) {
-        print("🔒 ScreenTimeController: blockApps called for tag \(tagID)")
+        AppLogger.screenTime.info("blockApps called for tag \(tagID)")
         
         // Simple authorization check - if not approved, the toggle method will handle it
-        guard authCenter.authorizationStatus == .approved || UserDefaults.standard.bool(forKey: "FocusLock_HasBeenAuthorized") else {
-            print("⚠️ ScreenTimeController: Authorization not approved")
+        guard authCenter.authorizationStatus == .approved || UserDefaults.standard.hasBeenAuthorized else {
+            AppLogger.screenTime.warning("Authorization not approved")
             return
         }
         
-        print("✅ ScreenTimeController: Authorization OK, activating blocking")
+        AppLogger.screenTime.debug("Authorization OK, activating blocking")
         
         // Use SelectionManager's blocking methods
-        selectionManager.activateBlocking(for: tagID)
+        let manager = selectionManager ?? SelectionManager.shared
+        manager.activateBlocking(for: tagID)
         
         isCurrentlyBlocking = true
         activeTagID = tagID
@@ -213,14 +222,15 @@ class ScreenTimeController: ObservableObject {
         // Update app state
         AppState.shared.setBlockingState(isActive: true)
         
-        print("✅ ScreenTimeController: Blocking state updated")
+        AppLogger.screenTime.info("Blocking state updated")
     }
     
     func unblockAll() {
-        print("🔓 ScreenTimeController: unblockAll called")
+        AppLogger.screenTime.info("unblockAll called")
         
         // 1. Use SelectionManager's deactivation (which clears the named blocking store)
-        selectionManager.deactivateBlocking()
+        let manager = selectionManager ?? SelectionManager.shared
+        manager.deactivateBlocking()
         
         // 2. Also clear the main/default store to be absolutely sure
         store.shield.applications = nil
@@ -246,24 +256,25 @@ class ScreenTimeController: ObservableObject {
         // 5. Update app state
         AppState.shared.setBlockingState(isActive: false)
         
-        print("✅ ScreenTimeController: All restrictions cleared")
+        AppLogger.screenTime.info("All restrictions cleared")
     }
     
     /// Block apps with a specific selection and source ID (for time profiles)
     func blockApps(selection: FamilyActivitySelection, sourceID: UUID) async -> Bool {
-        print("🔒 ScreenTimeController: blockApps called for source \(sourceID)")
+        AppLogger.screenTime.info("blockApps called for source \(sourceID)")
         
         // Ensure we have authorization first
         guard await checkAndRequestAuthorizationIfNeeded() else {
-            print("⚠️ ScreenTimeController: Authorization failed")
+            AppLogger.screenTime.warning("Authorization failed")
             return false
         }
         
-        print("✅ ScreenTimeController: Authorization OK, activating blocking")
+        AppLogger.screenTime.debug("Authorization OK, activating blocking")
         
         // Apply the shield using SelectionManager
-        selectionManager.setSelection(selection, for: sourceID)
-        selectionManager.activateBlocking(for: sourceID)
+        let manager = selectionManager ?? SelectionManager.shared
+        manager.setSelection(selection, for: sourceID)
+        manager.activateBlocking(for: sourceID)
         
         isCurrentlyBlocking = true
         activeTagID = sourceID
@@ -272,31 +283,31 @@ class ScreenTimeController: ObservableObject {
         // Update app state
         AppState.shared.setBlockingState(isActive: true)
         
-        print("✅ ScreenTimeController: Blocking state updated")
+        AppLogger.screenTime.info("Blocking state updated")
         return true
     }
     
     // MARK: - Toggle Logic
     
     func toggleBlocking(for tagID: UUID) async -> Bool {
-        print("🔄 ScreenTimeController: toggleBlocking called for tag \(tagID)")
-        print("   Current state: blocking=\(isCurrentlyBlocking), activeTag=\(activeTagID?.uuidString ?? "none")")
+        AppLogger.screenTime.info("toggleBlocking called for tag \(tagID)")
+        AppLogger.screenTime.debug("Current state: blocking=\(self.isCurrentlyBlocking), activeTag=\(self.activeTagID?.uuidString ?? "none")")
         
         // Ensure we have authorization first
         guard await checkAndRequestAuthorizationIfNeeded() else {
-            print("⚠️ ScreenTimeController: Authorization failed")
+            AppLogger.screenTime.warning("Authorization failed")
             return false
         }
         
-        print("✅ ScreenTimeController: Authorization OK")
+        AppLogger.screenTime.debug("Authorization OK")
         
         if isCurrentlyBlocking && activeTagID == tagID {
             // Same tag scanned again - unblock
-            print("   → Deactivating (same tag scanned)")
+            AppLogger.screenTime.info("Deactivating (same tag scanned)")
             unblockAll()
         } else {
             // Different tag or no active blocking - block
-            print("   → Activating (different tag or none active)")
+            AppLogger.screenTime.info("Activating (different tag or none active)")
             unblockAll() // Clear any existing restrictions first
             blockApps(for: tagID)
         }
@@ -307,12 +318,12 @@ class ScreenTimeController: ObservableObject {
     // MARK: - Debug
     
     func debugPrintState() {
-        print("=== ScreenTimeController Debug ===")
-        print("Authorization Status: \(authCenter.authorizationStatus)")
-        print("Is Blocking: \(isCurrentlyBlocking)")
-        print("Active Tag: \(activeTagID?.uuidString ?? "none")")
-        print("Last Auth Status: \(lastAuthorizationStatus)")
-        print("=================================")
+        AppLogger.screenTime.debug("=== ScreenTimeController Debug ===")
+        AppLogger.screenTime.debug("Authorization Status: \(self.authCenter.authorizationStatus)")
+        AppLogger.screenTime.debug("Is Blocking: \(self.isCurrentlyBlocking)")
+        AppLogger.screenTime.debug("Active Tag: \(self.activeTagID?.uuidString ?? "none")")
+        AppLogger.screenTime.debug("Last Auth Status: \(self.lastAuthorizationStatus)")
+        AppLogger.screenTime.debug("=================================")
     }
     
     // MARK: - Deprecated (for backward compatibility)

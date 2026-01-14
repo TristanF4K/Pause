@@ -12,9 +12,13 @@ struct TimeProfileAppPickerView: View {
     @Binding var isPresented: Bool
     let profile: TimeProfile
     
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var timeProfileController: TimeProfileController
+    @EnvironmentObject private var selectionManager: SelectionManager
+    
+    // MARK: - Local State
     @State private var selection = FamilyActivitySelection()
-    @StateObject private var appState = AppState.shared
-    @StateObject private var selectionManager = SelectionManager.shared
     
     var body: some View {
         NavigationStack {
@@ -115,7 +119,7 @@ struct TimeProfileAppPickerView: View {
     }
     
     private func saveSelection() {
-        TimeProfileController.shared.linkAppsToProfile(profile: profile, selection: selection)
+        timeProfileController.linkAppsToProfile(profile: profile, selection: selection)
         isPresented = false
     }
 }

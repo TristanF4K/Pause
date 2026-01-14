@@ -12,9 +12,13 @@ struct AppPickerView: View {
     @Binding var isPresented: Bool
     let tag: NFCTag
     
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var tagController: TagController
+    @EnvironmentObject private var selectionManager: SelectionManager
+    
+    // MARK: - Local State
     @State private var selection = FamilyActivitySelection()
-    @StateObject private var appState = AppState.shared
-    @StateObject private var selectionManager = SelectionManager.shared
     
     var body: some View {
         NavigationStack {
@@ -157,7 +161,7 @@ struct AppPickerView: View {
     private func saveSelection() {
         // Use the modern API that accepts FamilyActivitySelection directly
         // This properly handles encoding and storage of tokens
-        TagController.shared.linkAppsToTag(
+        tagController.linkAppsToTag(
             tag: tag,
             selection: selection
         )

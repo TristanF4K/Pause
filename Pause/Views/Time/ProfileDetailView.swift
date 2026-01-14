@@ -11,10 +11,13 @@ import FamilyControls
 struct TimeProfileDetailView: View {
     let profile: TimeProfile
     
-    @StateObject private var appState = AppState.shared
-    @StateObject private var selectionManager = SelectionManager.shared
-    @StateObject private var screenTimeController = ScreenTimeController.shared
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var timeProfileController: TimeProfileController
+    @EnvironmentObject private var selectionManager: SelectionManager
+    @EnvironmentObject private var screenTimeController: ScreenTimeController
     
+    // MARK: - Local State
     @State private var showingAppPicker = false
     @State private var showingScheduleEditor = false
     @State private var showingDeleteConfirmation = false
@@ -112,7 +115,7 @@ struct TimeProfileDetailView: View {
         .alert("Zeitprofil löschen?", isPresented: $showingDeleteConfirmation) {
             Button("Abbrechen", role: .cancel) {}
             Button("Löschen", role: .destructive) {
-                TimeProfileController.shared.deleteProfile(profile: profile)
+                timeProfileController.deleteProfile(profile: profile)
                 dismiss()
             }
         } message: {
@@ -157,7 +160,7 @@ struct TimeProfileDetailView: View {
                 Toggle("", isOn: Binding(
                     get: { profile.isEnabled },
                     set: { _ in
-                        TimeProfileController.shared.toggleEnabled(profile: profile)
+                        timeProfileController.toggleEnabled(profile: profile)
                     }
                 ))
                 .labelsHidden()

@@ -9,8 +9,14 @@ import SwiftUI
 
 struct AddTagView: View {
     @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var tagController: TagController
+    
+    // MARK: - Local Controllers
     @StateObject private var nfcController = NFCController.shared
     
+    // MARK: - Local State
     @State private var tagName = ""
     @State private var scannedIdentifier: String?
     @State private var isScanning = false
@@ -218,7 +224,7 @@ struct AddTagView: View {
     private func saveTag() {
         guard let identifier = scannedIdentifier else { return }
         
-        _ = TagController.shared.registerTag(
+        _ = tagController.registerTag(
             name: tagName.trimmingCharacters(in: .whitespacesAndNewlines),
             identifier: identifier
         )

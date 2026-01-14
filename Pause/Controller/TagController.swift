@@ -7,6 +7,8 @@
 
 import Foundation
 import FamilyControls
+import Combine
+import OSLog
 
 /// Result of a tag scan operation
 enum TagScanResult {
@@ -26,21 +28,51 @@ enum TagScanResult {
 }
 
 @MainActor
-class TagController {
+class TagController: ObservableObject {
+    // DEPRECATED: Use Environment-based injection instead
+    // This will be removed in a future version
     static let shared = TagController()
     
-    private let appState = AppState.shared
-    private let screenTimeController = ScreenTimeController.shared
-    private let selectionManager = SelectionManager.shared
+    // Injected dependencies
+    weak var appState: AppState?
+    weak var screenTimeController: ScreenTimeController?
+    weak var selectionManager: SelectionManager?
     
-    private init() {}
+    // Public initializer for DI
+    init(appState: AppState? = nil, 
+         screenTimeController: ScreenTimeController? = nil,
+         selectionManager: SelectionManager? = nil) {
+        self.appState = appState
+        self.screenTimeController = screenTimeController
+        self.selectionManager = selectionManager
+    }
     
+    // Legacy private init for .shared
+    private convenience init() {
+        self.init(appState: nil, screenTimeController: nil, selectionManager: nil)
+    }
+    
+    // MARK: - Dependency Accessors (with fallback to .shared)
+    
+    private var state: AppState {
+        appState ?? AppState.shared
+    }
+    
+    private var screenTime: ScreenTimeController {
+        screenTimeController ?? ScreenTimeController.shared
+    }
+    
+    private var selection: SelectionManager {
+        selectionManager ?? SelectionManager.shared
+    }
+    
+    // MARK: - Tag Management
     func registerTag(name: String, identifier: String) -> NFCTag {
         let tag = NFCTag(
             name: name,
             tagIdentifier: identifier
         )
-        appState.addTag(tag)
+        state.addTag(tag)
         
         return tag
     }
@@ -50,12 +82,12 @@ class TagController {
     func linkAppsToTag(tag: NFCTag, selection: FamilyActivitySelection) {
         // SECURITY: Cannot change app selection while tag is currently active
         if tag.isActive {
-            print("🚫 Cannot change app selection while tag is active")
+            AppLogger.tags.warning("🚫 Cannot change app selection while tag is active")
             return
         }
         
         // Store selection in SelectionManager
-        selectionManager.setSelection(selection, for: tag.id)
+        self.selection.setSelection(selection, for: tag.id)
         
         // Update tag metadata for UI purposes
         var updatedTag = tag
@@ -69,11 +101,13 @@ class TagController {
             try? encoder.encode(token).base64EncodedString()
         })
         
-        appState.updateTag(updatedTag)
+        state.updateTag(updatedTag)
+        
+        AppLogger.tags.info("✅ Linked \(selection.applicationTokens.count) apps and \(selection.categoryTokens.count) categories to tag '\(tag.name)'")
     }
     
     func handleTagScan(identifier: String) async -> TagScanResult {
-        print("🏷️ TagController: handleTagScan called with identifier: \(identifier)")
+        AppLogger.tags.info("🏷️ handleTagScan called with identifier: \(identifier)")
         
         // Normalize identifier for comparison
         let normalizedScannedId = identifier.lowercased()
@@ -81,46 +115,46 @@ class TagController {
             .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: ":", with: "")
         
-        print("   Normalized: \(normalizedScannedId)")
+        AppLogger.tags.debug("Normalized identifier: \(normalizedScannedId)")
         
         // Find tag with this identifier (with normalized comparison)
-        guard let tag = appState.registeredTags.first(where: { registeredTag in
+        guard let tag = state.registeredTags.first(where: { registeredTag in
             let normalizedRegisteredId = registeredTag.tagIdentifier.lowercased()
                 .replacingOccurrences(of: " ", with: "")
                 .replacingOccurrences(of: "-", with: "")
                 .replacingOccurrences(of: ":", with: "")
             return normalizedRegisteredId == normalizedScannedId
         }) else {
-            print("⚠️ TagController: No tag found with this identifier")
+            AppLogger.tags.warning("⚠️ No tag found with this identifier")
             return .notRegistered
         }
         
-        print("✅ TagController: Found tag '\(tag.name)' (ID: \(tag.id))")
+        AppLogger.tags.info("✅ Found tag '\(tag.name)' (ID: \(tag.id))")
         
         // Check if tag has apps linked
-        guard selectionManager.hasSelection(for: tag.id) else {
-            print("⚠️ TagController: Tag has no apps/selections configured")
+        guard selection.hasSelection(for: tag.id) else {
+            AppLogger.tags.warning("⚠️ Tag '\(tag.name)' has no apps/selections configured")
             return .noAppsLinked(tagName: tag.name)
         }
         
-        let selectionInfo = selectionManager.selectionInfo(for: tag.id)
-        print("   Selection: \(selectionInfo.apps) apps, \(selectionInfo.categories) categories")
+        let selectionInfo = selection.selectionInfo(for: tag.id)
+        AppLogger.tags.debug("Selection: \(selectionInfo.apps) apps, \(selectionInfo.categories) categories")
         
         // SECURITY CHECK: Prevent activating a different tag when another is active
-        if !tag.isActive && appState.hasOtherActiveTag(than: tag.id) {
-            if let activeTag = appState.getActiveTag() {
-                print("🚫 TagController: Cannot activate '\(tag.name)' - '\(activeTag.name)' is currently active")
+        if !tag.isActive && state.hasOtherActiveTag(than: tag.id) {
+            if let activeTag = state.getActiveTag() {
+                AppLogger.tags.warning("🚫 Cannot activate '\(tag.name)' - '\(activeTag.name)' is currently active")
                 return .blockedByOtherTag(activeTagName: activeTag.name, attemptedTagName: tag.name)
             }
         }
         
         // SECURITY CHECK: Prevent activating tag when a time profile is active
         if !tag.isActive {
-            let activeTimeProfiles = appState.timeProfiles.filter { profile in
-                profile.isCurrentlyBlocking(appState: appState, screenTimeController: screenTimeController)
+            let activeTimeProfiles = state.timeProfiles.filter { profile in
+                profile.isCurrentlyBlocking(appState: state, screenTimeController: screenTime)
             }
             if let activeProfile = activeTimeProfiles.first {
-                print("🚫 TagController: Cannot activate '\(tag.name)' - Time profile '\(activeProfile.name)' is currently active")
+                AppLogger.tags.warning("🚫 Cannot activate '\(tag.name)' - Time profile '\(activeProfile.name)' is currently active")
                 return .blockedByTimeProfile(profileName: activeProfile.name, attemptedTagName: tag.name)
             }
         }
@@ -129,23 +163,23 @@ class TagController {
         let wasActiveBefore = tag.isActive
         
         // Toggle blocking state via ScreenTimeController
-        print("   Calling toggleBlocking...")
-        let success = await screenTimeController.toggleBlocking(for: tag.id)
+        AppLogger.tags.debug("Calling toggleBlocking for tag '\(tag.name)'...")
+        let success = await screenTime.toggleBlocking(for: tag.id)
         
         guard success else {
-            print("⚠️ TagController: toggleBlocking failed")
+            AppLogger.tags.error("❌ toggleBlocking failed for tag '\(tag.name)'")
             return .failed
         }
         
-        print("✅ TagController: toggleBlocking succeeded")
+        AppLogger.tags.info("✅ toggleBlocking succeeded for tag '\(tag.name)'")
         
         // Update UI state
         var updatedTag = tag
-        updatedTag.isActive = screenTimeController.isCurrentlyBlocking && screenTimeController.activeTagID == tag.id
-        appState.updateTag(updatedTag)
-        appState.setBlockingState(isActive: updatedTag.isActive)
+        updatedTag.isActive = screenTime.isCurrentlyBlocking && screenTime.activeTagID == tag.id
+        state.updateTag(updatedTag)
+        state.setBlockingState(isActive: updatedTag.isActive)
         
-        print("   Updated tag state: isActive=\(updatedTag.isActive)")
+        AppLogger.tags.debug("Updated tag state: isActive=\(updatedTag.isActive)")
         
         // Update active profile for UI
         if updatedTag.isActive {
@@ -155,14 +189,14 @@ class TagController {
                 blockedCategoryTokens: tag.linkedCategoryTokens,
                 isActive: true
             )
-            appState.activeProfile = profile
-            print("   Set active profile: \(tag.name)")
+            state.activeProfile = profile
+            AppLogger.tags.info("Set active profile: \(tag.name)")
         } else {
-            appState.activeProfile = nil
-            print("   Cleared active profile")
+            state.activeProfile = nil
+            AppLogger.tags.info("Cleared active profile")
             
             // IMPORTANT: After deactivating a tag, check if a time profile should take over
-            print("   Checking if time profile should activate now...")
+            AppLogger.tags.debug("Checking if time profile should activate now...")
             TimeProfileController.shared.checkAndUpdateProfiles()
         }
         
@@ -172,15 +206,15 @@ class TagController {
     func deleteTag(tag: NFCTag) {
         // If this tag is currently active, unblock first
         if tag.isActive {
-            screenTimeController.unblockAll()
-            appState.setBlockingState(isActive: false)
+            screenTime.unblockAll()
+            state.setBlockingState(isActive: false)
         }
         
         // Remove selection from memory
-        selectionManager.removeSelection(for: tag.id)
+        selection.removeSelection(for: tag.id)
         
         // Remove tag from app state
-        appState.deleteTag(tag)
+        state.deleteTag(tag)
     }
     
     // MARK: - Legacy API (deprecated)
@@ -190,6 +224,6 @@ class TagController {
         var updatedTag = tag
         updatedTag.linkedAppTokens = appTokens
         updatedTag.linkedCategoryTokens = categoryTokens
-        appState.updateTag(updatedTag)
+        state.updateTag(updatedTag)
     }
 }

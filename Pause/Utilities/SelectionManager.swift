@@ -9,6 +9,7 @@ import SwiftUI
 import Combine
 @preconcurrency import FamilyControls
 import ManagedSettings
+import OSLog
 
 // MARK: - ManagedSettingsStore Extension for Complete Clearing
 
@@ -285,14 +286,12 @@ class SelectionManager: ObservableObject {
     /// This is the ONLY time we write to ManagedSettingsStore
     func activateBlocking(for tagID: UUID) {
         guard let selection = getSelection(for: tagID) else {
-            print("⚠️ SelectionManager: No selection found for tag \(tagID)")
+            AppLogger.selection.warning("No selection found for tag \(tagID)")
             return
         }
         
-        print("✅ SelectionManager: Activating blocking for tag \(tagID)")
-        print("   - Apps: \(selection.applicationTokens.count)")
-        print("   - Categories: \(selection.categoryTokens.count)")
-        print("   - Web Domains: \(selection.webDomainTokens.count)")
+        AppLogger.selection.info("Activating blocking for tag \(tagID)")
+        AppLogger.selection.debug("Apps: \(selection.applicationTokens.count), Categories: \(selection.categoryTokens.count), Web Domains: \(selection.webDomainTokens.count)")
         
         // Copy the selection to the blocking store (this activates the restrictions)
         blockingStore.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
@@ -308,12 +307,12 @@ class SelectionManager: ObservableObject {
         activeTagID = tagID
         UserDefaults.standard.set(tagID.uuidString, forKey: activeTagIDKey)
         
-        print("✅ SelectionManager: Blocking activated successfully")
+        AppLogger.selection.info("Blocking activated successfully")
     }
     
     /// Deactivates blocking by clearing the blocking store
     func deactivateBlocking() {
-        print("🔓 SelectionManager: Deactivating blocking")
+        AppLogger.selection.info("Deactivating blocking")
         
         // Clear the blocking store (this removes all restrictions)
         blockingStore.clearAllSettings()
@@ -321,7 +320,7 @@ class SelectionManager: ObservableObject {
         activeTagID = nil
         UserDefaults.standard.removeObject(forKey: activeTagIDKey)
         
-        print("✅ SelectionManager: Blocking deactivated successfully")
+        AppLogger.selection.info("Blocking deactivated successfully")
     }
     
     // MARK: - Helper Methods
@@ -352,9 +351,9 @@ class SelectionManager: ObservableObject {
     }
     
     func debugPrintSelections() {
-        print("=== SelectionManager Debug ===")
-        print("Configured tags: \(configuredTags.count)")
-        print("Currently blocking: \(activeTagID?.uuidString ?? "none")")
+        AppLogger.selection.debug("=== SelectionManager Debug ===")
+        AppLogger.selection.debug("Configured tags: \(self.configuredTags.count)")
+        AppLogger.selection.debug("Currently blocking: \(self.activeTagID?.uuidString ?? "none")")
         
         // Check blocking store status
         let blockingHasApps = blockingStore.shield.applications?.isEmpty == false
@@ -366,12 +365,12 @@ class SelectionManager: ObservableObject {
         }()
         let blockingHasWebDomains = blockingStore.shield.webDomains?.isEmpty == false
         
-        print("Blocking store active: apps=\(blockingHasApps), categories=\(blockingHasCategories), web=\(blockingHasWebDomains)")
+        AppLogger.selection.debug("Blocking store active: apps=\(blockingHasApps), categories=\(blockingHasCategories), web=\(blockingHasWebDomains)")
         
         for tagID in configuredTags {
             let info = selectionInfo(for: tagID)
-            print("  Tag \(tagID): \(info.apps) apps, \(info.categories) categories, \(info.webDomains) web domains")
+            AppLogger.selection.debug("Tag \(tagID): \(info.apps) apps, \(info.categories) categories, \(info.webDomains) web domains")
         }
-        print("=============================")
+        AppLogger.selection.debug("=============================")
     }
 }

@@ -92,10 +92,10 @@ private let selectionManager = SelectionManager.shared
 
 ---
 
-### 3. State Synchronisierung über UserDefaults
+### 3. State Synchronisierung über UserDefaults ✅ ERLEDIGT
 
 **Problem:**
-`ScreenTimeController` und andere speichern State in UserDefaults mit verschiedenen Keys:
+`ScreenTimeController` und andere speicherten State in UserDefaults mit verschiedenen Keys:
 
 ```swift
 // ScreenTimeController.swift
@@ -115,34 +115,37 @@ private let activeTagKey = "FocusLock_ActiveTag"
 - Keine zentrale Verwaltung
 - Keine Type-Safety
 
-**Lösung:**
+**✅ Lösung implementiert (14. Januar 2026):**
+
+Erstellt: `UserDefaultsKeys.swift` mit:
+- Zentralem Enum für alle Keys mit einheitlicher Namenskonvention
+- Property Wrapper `@UserDefault<T>` für Type-Safety
+- Convenience Extensions auf `UserDefaults` für typsicheren Zugriff
+
 ```swift
-// UserDefaultsKeys.swift
-enum UserDefaultsKeys {
-    static let hasBeenAuthorized = "pause.authorization.hasBeenAuthorized"
-    static let lastSuccessfulAuth = "pause.authorization.lastSuccessful"
-    static let blockingState = "pause.blocking.isActive"
-    static let activeSourceID = "pause.blocking.activeSource"
-}
+// Neue zentrale Keys
+UserDefaultsKeys.hasBeenAuthorized = "pause.authorization.hasBeenAuthorized"
+UserDefaultsKeys.authorizationGranted = "pause.authorization.isGranted"
+UserDefaultsKeys.lastSuccessfulAuth = "pause.authorization.lastSuccessful"
+UserDefaultsKeys.blockingState = "pause.blocking.isActive"
+UserDefaultsKeys.activeSourceID = "pause.blocking.activeSourceID"
 
-// Property Wrapper für Type-Safety
-@propertyWrapper
-struct UserDefault<T> {
-    let key: String
-    let defaultValue: T
-    
-    var wrappedValue: T {
-        get { UserDefaults.standard.object(forKey: key) as? T ?? defaultValue }
-        set { UserDefaults.standard.set(newValue, forKey: key) }
-    }
-}
-
-// Verwendung
-struct AppSettings {
-    @UserDefault(key: UserDefaultsKeys.hasBeenAuthorized, defaultValue: false)
-    static var hasBeenAuthorized: Bool
-}
+// Type-Safe Verwendung
+UserDefaults.standard.hasBeenAuthorized = true
+UserDefaults.standard.activeSourceID = tagID
 ```
+
+**Aktualisierte Dateien:**
+- ✅ `UserDefaultsKeys.swift` (neu erstellt)
+- ✅ `AppState.swift` (3 Stellen aktualisiert)
+- ✅ `ScreenTimeController.swift` (alle 16 Vorkommen aktualisiert)
+
+**Vorteile:**
+- ✅ Einheitliche Namenskonvention (`pause.*`)
+- ✅ Keine String-Literale mehr im Code verstreut
+- ✅ Type-Safety durch Extensions
+- ✅ Zentrale Wartbarkeit
+- ✅ Eliminierung von Duplikaten
 
 ---
 
@@ -308,10 +311,12 @@ struct HomeView: View {
 
 ---
 
-### 8. Print Statements für Debugging
+### 8. Print Statements für Debugging ✅ ERLEDIGT
+
+**Status:** Behoben (14. Januar 2026)
 
 **Problem:**
-Production Code ist voll mit Debug-Print-Statements:
+Production Code war voll mit Debug-Print-Statements:
 
 ```swift
 print("🔒 ScreenTimeController: blockApps called")
@@ -319,31 +324,59 @@ print("✅ Authorization OK")
 print("⏰ Timer scheduled to check every 5 seconds")
 ```
 
-**Lösung:**
-Implementiere ein Logging-System:
+**Probleme:**
+- Keine Log-Levels
+- Schwer filterbar
+- Performance-Impact in Production
+- Keine Integration mit System-Tools
+
+**✅ Lösung implementiert (14. Januar 2026):**
+
+Erstellt modernes Logging-System mit **OSLog** (Apple's Framework):
 
 ```swift
 // Logger.swift
-enum LogLevel {
-    case debug, info, warning, error
-}
+import OSLog
 
-struct Logger {
-    static func log(_ message: String, level: LogLevel = .info, file: String = #file) {
-        #if DEBUG
-        let fileName = (file as NSString).lastPathComponent
-        print("[\(level)] [\(fileName)] \(message)")
-        #endif
-    }
+enum AppLogger {
+    private static let subsystem = Bundle.main.bundleIdentifier ?? "com.pause.app"
+    
+    // Loggers by Category
+    static let general = Logger(subsystem: subsystem, category: "General")
+    static let screenTime = Logger(subsystem: subsystem, category: "ScreenTime")
+    static let nfc = Logger(subsystem: subsystem, category: "NFC")
+    static let tags = Logger(subsystem: subsystem, category: "Tags")
+    static let timeProfiles = Logger(subsystem: subsystem, category: "TimeProfiles")
+    static let selection = Logger(subsystem: subsystem, category: "Selection")
+    static let persistence = Logger(subsystem: subsystem, category: "Persistence")
+    static let ui = Logger(subsystem: subsystem, category: "UI")
 }
 
 // Verwendung
-Logger.log("blockApps called for tag \(tagID)", level: .debug)
+AppLogger.tags.info("✅ Found tag '\(tag.name)'")
+AppLogger.tags.warning("⚠️ Tag has no apps configured")
+AppLogger.tags.error("❌ Failed to activate tag")
+AppLogger.tags.debug("Normalized identifier: \(id)")
 ```
 
-**OSLog nutzen:**
-```swift
-import OSLog
+**Migrierte Dateien:**
+- ✅ `Logger.swift` (neu erstellt)
+- ✅ `TagController.swift` - 15 print() statements ersetzt
+- ✅ `TimeProfileController.swift` - 20 print() statements ersetzt
+
+**Vorteile:**
+- 🎯 **Performance-optimiert:** OSLog ist extrem effizient
+- 📊 **Console.app Integration:** Logs direkt im System-Tool sichtbar
+- 🏷️ **Filterbar:** Nach Kategorie (Tags, TimeProfiles, etc.)
+- 🚀 **Production-ready:** Automatische Optimierung in Release-Builds
+- 📝 **Log Levels:** debug, info, warning, error, fault
+
+**Nächste Schritte (optional):**
+- [ ] Weitere Controller migrieren (ScreenTimeController, AppState, etc.)
+- [ ] NFC-spezifische Logs hinzufügen
+- [ ] Persistence-Logs hinzufügen
+
+---
 
 extension Logger {
     static let screenTime = Logger(subsystem: "com.pause.app", category: "ScreenTime")
@@ -587,9 +620,9 @@ struct TimeScheduleTests {
 ## 📋 Empfohlene Refactoring-Reihenfolge
 
 ### Phase 1: Foundation (1-2 Tage)
-1. ✅ Einheitliches Logging-System (OSLog)
-2. ✅ Zentrale UserDefaults-Verwaltung
-3. ✅ Wiederverwendbare UI-Komponenten
+1. ✅ **ERLEDIGT** - Zentrale UserDefaults-Verwaltung (14.01.2026)
+2. ⏳ Einheitliches Logging-System (OSLog)
+3. ⏳ Wiederverwendbare UI-Komponenten
 
 ### Phase 2: Architecture (3-5 Tage)
 4. ✅ Singleton → Environment-basiertes DI

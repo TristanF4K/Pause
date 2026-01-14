@@ -11,8 +11,12 @@ import FamilyControls
 struct TagDetailView: View {
     let tag: NFCTag
     
-    @StateObject private var appState = AppState.shared
-    @StateObject private var selectionManager = SelectionManager.shared
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var tagController: TagController
+    @EnvironmentObject private var selectionManager: SelectionManager
+    
+    // MARK: - Local State
     @State private var editedName: String
     @State private var showingAppPicker = false
     @State private var isEditing = false
@@ -256,7 +260,7 @@ struct TagDetailView: View {
     
     private func saveAppSelection(_ selection: FamilyActivitySelection) {
         // Use TagController to properly save the selection
-        TagController.shared.linkAppsToTag(tag: tag, selection: selection)
+        tagController.linkAppsToTag(tag: tag, selection: selection)
     }
 }
 

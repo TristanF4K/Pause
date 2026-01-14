@@ -8,7 +8,10 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var appState = AppState.shared
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    
+    // MARK: - Local State
     @State private var selectedTab = 0
     
     init() {

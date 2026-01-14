@@ -8,9 +8,16 @@
 import SwiftUI
 
 struct HomeView: View {
-    @StateObject private var appState = AppState.shared
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var tagController: TagController
+    @EnvironmentObject private var screenTimeController: ScreenTimeController
+    @EnvironmentObject private var selectionManager: SelectionManager
+    
+    // MARK: - Local Controllers
     @StateObject private var nfcController = NFCController.shared
-    @StateObject private var selectionManager = SelectionManager.shared
+    
+    // MARK: - Local State
     @State private var showingAuthorizationAlert = false
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
@@ -192,7 +199,7 @@ struct HomeView: View {
     private func handleScannedIdentifier(_ identifier: String) {
         // Get the scan result from TagController
         Task {
-            let scanResult = await TagController.shared.handleTagScan(identifier: identifier)
+            let scanResult = await tagController.handleTagScan(identifier: identifier)
             
             await MainActor.run {
                 switch scanResult {
@@ -251,7 +258,7 @@ struct HomeView: View {
     private func requestAuthorization() {
         Task {
             do {
-                try await ScreenTimeController.shared.requestAuthorization()
+                try await screenTimeController.requestAuthorization()
                 await appState.checkAuthorizationStatus()
             } catch {
                 showingAuthorizationAlert = true

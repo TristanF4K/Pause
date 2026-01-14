@@ -9,6 +9,11 @@ import SwiftUI
 
 struct AddTimeProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var timeProfileController: TimeProfileController
+    
+    // MARK: - Local State
     @State private var profileName = ""
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -91,7 +96,7 @@ struct AddTimeProfileView: View {
         }
         
         // Create the profile
-        _ = TimeProfileController.shared.createProfile(name: trimmedName)
+        _ = timeProfileController.createProfile(name: trimmedName)
         
         dismiss()
     }

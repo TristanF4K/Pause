@@ -8,7 +8,11 @@
 import SwiftUI
 
 struct TagListView: View {
-    @StateObject private var appState = AppState.shared
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var tagController: TagController
+    
+    // MARK: - Local State
     @State private var showingAddTagView = false
     @State private var tagToDelete: NFCTag?
     @State private var showingDeleteAlert = false
@@ -84,7 +88,7 @@ struct TagListView: View {
             .alert("Tag löschen?", isPresented: $showingDeleteAlert, presenting: tagToDelete) { tag in
                 Button("Löschen", role: .destructive) {
                     print("🗑️ Deleting tag: \(tag.name) (ID: \(tag.id))")
-                    TagController.shared.deleteTag(tag: tag)
+                    tagController.deleteTag(tag: tag)
                 }
                 Button("Abbrechen", role: .cancel) {}
             } message: { tag in

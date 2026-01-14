@@ -11,6 +11,11 @@ struct ScheduleEditorView: View {
     let profile: TimeProfile
     
     @Environment(\.dismiss) private var dismiss
+    
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var timeProfileController: TimeProfileController
+    
+    // MARK: - Local State
     @State private var selectedWeekdays: Set<Weekday>
     @State private var startTime: Date
     @State private var endTime: Date
@@ -177,7 +182,7 @@ struct ScheduleEditorView: View {
             endTime: TimeOfDay(from: endTime)
         )
         
-        TimeProfileController.shared.updateSchedule(profile: profile, schedule: schedule)
+        timeProfileController.updateSchedule(profile: profile, schedule: schedule)
         dismiss()
     }
 }

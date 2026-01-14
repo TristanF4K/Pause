@@ -11,6 +11,8 @@ import Combine
 
 @MainActor
 class AppState: ObservableObject {
+    // DEPRECATED: Use Environment-based injection instead
+    // This will be removed in a future version
     static let shared = AppState()
     
     @Published var isAuthorized: Bool = false
@@ -21,12 +23,22 @@ class AppState: ObservableObject {
     
     private let persistenceController = PersistenceController.shared
     
-    private init() {
+    // Reference to ScreenTimeController - will be injected
+    weak var screenTimeController: ScreenTimeController?
+    
+    // Public initializer for DI
+    init(screenTimeController: ScreenTimeController? = nil) {
+        self.screenTimeController = screenTimeController
         loadData()
         // Check authorization status immediately
         Task {
             await checkAuthorizationStatus()
         }
+    }
+    
+    // Legacy private init for .shared
+    private convenience init() {
+        self.init(screenTimeController: nil)
     }
     
     func loadData() {
@@ -36,7 +48,12 @@ class AppState: ObservableObject {
         
         // IMPORTANT: Sync blocking state from ScreenTimeController
         // This ensures the UI reflects the actual blocking state after app restart
-        isBlocking = ScreenTimeController.shared.isCurrentlyBlocking
+        if let controller = screenTimeController {
+            isBlocking = controller.isCurrentlyBlocking
+        } else {
+            // Fallback to legacy singleton (will be removed)
+            isBlocking = ScreenTimeController.shared.isCurrentlyBlocking
+        }
         
         // Sync tag active states with actual blocking status
         syncTagStatesWithBlockingState()
@@ -45,9 +62,9 @@ class AppState: ObservableObject {
     /// Synchronizes tag isActive states with the actual blocking state from ScreenTimeController
     /// This ensures that after app restart, tags reflect the correct active/inactive state
     private func syncTagStatesWithBlockingState() {
-        let screenTimeController = ScreenTimeController.shared
-        let activeTagID = screenTimeController.activeTagID
-        let isBlocking = screenTimeController.isCurrentlyBlocking
+        let controller = screenTimeController ?? ScreenTimeController.shared
+        let activeTagID = controller.activeTagID
+        let isBlocking = controller.isCurrentlyBlocking
         
         // Update all tags: only the active tag should be marked as active
         for i in registeredTags.indices {
@@ -95,14 +112,14 @@ class AppState: ObservableObject {
         case .approved:
             isAuthorized = true
             // Store that we have been authorized before
-            UserDefaults.standard.set(true, forKey: "Pause.hasBeenAuthorized")
+            UserDefaults.standard.hasBeenAuthorized = true
         case .denied:
             isAuthorized = false
             // Clear the flag if explicitly denied
-            UserDefaults.standard.set(false, forKey: "Pause.hasBeenAuthorized")
+            UserDefaults.standard.hasBeenAuthorized = false
         case .notDetermined:
             // Check if we've been authorized before
-            let hasBeenAuthorized = UserDefaults.standard.bool(forKey: "Pause.hasBeenAuthorized")
+            let hasBeenAuthorized = UserDefaults.standard.hasBeenAuthorized
             
             if hasBeenAuthorized {
                 // We've been authorized before, probably just app restart

@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @StateObject private var appState = AppState.shared
+    // MARK: - Environment Dependencies
+    @EnvironmentObject private var appState: AppState
     
     var body: some View {
         NavigationStack {
