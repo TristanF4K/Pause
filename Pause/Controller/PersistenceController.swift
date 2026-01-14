@@ -11,6 +11,7 @@ class PersistenceController {
     static let shared = PersistenceController()
     
     private let tagsKey = "focuslock.tags"
+    private let timeProfilesKey = "focuslock.timeProfiles"
     private let activeProfileKey = "focuslock.activeProfile"
     
     private init() {}
@@ -49,5 +50,21 @@ class PersistenceController {
     
     func clearActiveProfile() {
         UserDefaults.standard.removeObject(forKey: activeProfileKey)
+    }
+    
+    // MARK: - Time Profiles
+    
+    func saveTimeProfiles(_ profiles: [TimeProfile]) {
+        if let encoded = try? JSONEncoder().encode(profiles) {
+            UserDefaults.standard.set(encoded, forKey: timeProfilesKey)
+        }
+    }
+    
+    func loadTimeProfiles() -> [TimeProfile] {
+        guard let data = UserDefaults.standard.data(forKey: timeProfilesKey),
+              let profiles = try? JSONDecoder().decode([TimeProfile].self, from: data) else {
+            return []
+        }
+        return profiles
     }
 }

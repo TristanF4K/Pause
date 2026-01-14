@@ -190,39 +190,20 @@ struct HomeView: View {
     }
     
     private func handleScannedIdentifier(_ identifier: String) {
-        // Normalize the scanned identifier
-        let normalizedScannedId = identifier.lowercased()
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: ":", with: "")
-        
-        // Check if tag is registered (with normalized comparison)
-        if let tag = appState.registeredTags.first(where: { registeredTag in
-            let normalizedRegisteredId = registeredTag.tagIdentifier.lowercased()
-                .replacingOccurrences(of: " ", with: "")
-                .replacingOccurrences(of: "-", with: "")
-                .replacingOccurrences(of: ":", with: "")
-            return normalizedRegisteredId == normalizedScannedId
-        }) {
-            // Remember the PREVIOUS state before toggling
-            let wasActiveBeforeScan = tag.isActive
+        // Get the scan result from TagController
+        Task {
+            let scanResult = await TagController.shared.handleTagScan(identifier: identifier)
             
-            // Handle registered tag
-            TagController.shared.handleTagScan(identifier: identifier)
-            
-            // Wait a moment for the async operation to complete
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                // Get updated tag after the scan
-                if let updatedTag = appState.registeredTags.first(where: { $0.id == tag.id }) {
-                    scannedTag = updatedTag
+            await MainActor.run {
+                switch scanResult {
+                case .success(let tag, let wasActivated):
+                    scannedTag = tag
                     
                     // Set success message based on what happened
-                    if !wasActiveBeforeScan && updatedTag.isActive {
-                        successMessage = "'\(updatedTag.name)' wurde aktiviert"
-                    } else if wasActiveBeforeScan && !updatedTag.isActive {
-                        successMessage = "'\(updatedTag.name)' wurde deaktiviert"
+                    if wasActivated {
+                        successMessage = "'\(tag.name)' wurde aktiviert"
                     } else {
-                        successMessage = "Tag gescannt"
+                        successMessage = "'\(tag.name)' wurde deaktiviert"
                     }
                     
                     showingSuccessAlert = true
@@ -230,12 +211,40 @@ struct HomeView: View {
                     // Haptic feedback
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(.success)
+                    
+                case .notRegistered:
+                    errorMessage = "Dieser Tag ist nicht registriert. Bitte füge ihn zuerst in den Einstellungen hinzu."
+                    showingErrorAlert = true
+                    
+                case .noAppsLinked(let tagName):
+                    errorMessage = "Der Tag '\(tagName)' hat keine Apps verknüpft. Bitte wähle zuerst Apps aus."
+                    showingErrorAlert = true
+                    
+                case .blockedByOtherTag(let activeTagName, _):
+                    errorMessage = "'\(activeTagName)' ist bereits aktiv. Scanne '\(activeTagName)' zuerst, um ihn zu deaktivieren."
+                    showingErrorAlert = true
+                    
+                    // Error haptic feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
+                    
+                case .blockedByTimeProfile(let profileName, _):
+                    errorMessage = "Zeitprofil '\(profileName)' ist gerade aktiv. Tags können nicht aktiviert werden, während ein Zeitprofil aktiv ist."
+                    showingErrorAlert = true
+                    
+                    // Error haptic feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
+                    
+                case .failed:
+                    errorMessage = "Die Blockierung konnte nicht aktiviert/deaktiviert werden. Bitte versuche es erneut."
+                    showingErrorAlert = true
+                    
+                    // Error haptic feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
                 }
             }
-        } else {
-            // Tag not registered
-            errorMessage = "Dieser Tag ist nicht registriert. Bitte füge ihn zuerst in den Einstellungen hinzu."
-            showingErrorAlert = true
         }
     }
     

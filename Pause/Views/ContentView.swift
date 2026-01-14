@@ -48,11 +48,17 @@ struct ContentView: View {
                     }
                     .tag(1)
                 
+                TimeProfilesView()
+                    .tabItem {
+                        Label("Zeitprofile", systemImage: "clock.fill")
+                    }
+                    .tag(2)
+                
                 SettingsView()
                     .tabItem {
                         Label("Einstellungen", systemImage: "gearshape.fill")
                     }
-                    .tag(2)
+                    .tag(3)
             }
             .accentColor(PauseColors.accent)
         }

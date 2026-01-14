@@ -116,6 +116,29 @@ struct SettingsView: View {
                                         .foregroundColor(PauseColors.accent)
                                 }
                                 .padding(Spacing.md)
+                                
+                                Divider()
+                                    .background(PauseColors.cardBorder)
+                                    .padding(.horizontal, Spacing.md)
+                                
+                                // Zeitprofile
+                                HStack(spacing: Spacing.md) {
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: FontSize.lg))
+                                        .foregroundColor(PauseColors.accent)
+                                        .frame(width: 32)
+                                    
+                                    Text("Zeitprofile")
+                                        .font(.system(size: FontSize.base))
+                                        .foregroundColor(PauseColors.primaryText)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(appState.timeProfiles.count)")
+                                        .font(.system(size: FontSize.base, weight: .semibold))
+                                        .foregroundColor(PauseColors.accent)
+                                }
+                                .padding(Spacing.md)
                             }
                             .card()
                         }

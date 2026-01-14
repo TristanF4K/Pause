@@ -15,6 +15,7 @@ class AppState: ObservableObject {
     
     @Published var isAuthorized: Bool = false
     @Published var registeredTags: [NFCTag] = []
+    @Published var timeProfiles: [TimeProfile] = []
     @Published var activeProfile: BlockingProfile?
     @Published var isBlocking: Bool = false
     
@@ -30,6 +31,7 @@ class AppState: ObservableObject {
     
     func loadData() {
         registeredTags = persistenceController.loadTags()
+        timeProfiles = persistenceController.loadTimeProfiles()
         activeProfile = persistenceController.loadActiveProfile()
         
         // IMPORTANT: Sync blocking state from ScreenTimeController
@@ -80,6 +82,7 @@ class AppState: ObservableObject {
     
     func saveData() {
         persistenceController.saveTags(registeredTags)
+        persistenceController.saveTimeProfiles(timeProfiles)
         if let activeProfile = activeProfile {
             persistenceController.saveActiveProfile(activeProfile)
         }
@@ -134,6 +137,35 @@ class AppState: ObservableObject {
     func setBlockingState(isActive: Bool) {
         isBlocking = isActive
         activeProfile?.isActive = isActive
+        saveData()
+    }
+    
+    /// Returns the currently active tag, if any
+    func getActiveTag() -> NFCTag? {
+        return registeredTags.first(where: { $0.isActive })
+    }
+    
+    /// Checks if a different tag than the provided one is currently active
+    func hasOtherActiveTag(than tagID: UUID) -> Bool {
+        return registeredTags.contains(where: { $0.isActive && $0.id != tagID })
+    }
+    
+    // MARK: - TimeProfile Management
+    
+    func addTimeProfile(_ profile: TimeProfile) {
+        timeProfiles.append(profile)
+        saveData()
+    }
+    
+    func updateTimeProfile(_ profile: TimeProfile) {
+        if let index = timeProfiles.firstIndex(where: { $0.id == profile.id }) {
+            timeProfiles[index] = profile
+            saveData()
+        }
+    }
+    
+    func deleteTimeProfile(_ profile: TimeProfile) {
+        timeProfiles.removeAll { $0.id == profile.id }
         saveData()
     }
 }

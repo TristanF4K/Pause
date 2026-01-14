@@ -249,6 +249,33 @@ class ScreenTimeController: ObservableObject {
         print("✅ ScreenTimeController: All restrictions cleared")
     }
     
+    /// Block apps with a specific selection and source ID (for time profiles)
+    func blockApps(selection: FamilyActivitySelection, sourceID: UUID) async -> Bool {
+        print("🔒 ScreenTimeController: blockApps called for source \(sourceID)")
+        
+        // Ensure we have authorization first
+        guard await checkAndRequestAuthorizationIfNeeded() else {
+            print("⚠️ ScreenTimeController: Authorization failed")
+            return false
+        }
+        
+        print("✅ ScreenTimeController: Authorization OK, activating blocking")
+        
+        // Apply the shield using SelectionManager
+        selectionManager.setSelection(selection, for: sourceID)
+        selectionManager.activateBlocking(for: sourceID)
+        
+        isCurrentlyBlocking = true
+        activeTagID = sourceID
+        saveState() // Persist state
+        
+        // Update app state
+        AppState.shared.setBlockingState(isActive: true)
+        
+        print("✅ ScreenTimeController: Blocking state updated")
+        return true
+    }
+    
     // MARK: - Toggle Logic
     
     func toggleBlocking(for tagID: UUID) async -> Bool {

@@ -28,6 +28,21 @@ struct TagDetailView: View {
         _selection = State(initialValue: existingSelection)
     }
     
+    // Get current tag from appState to reflect real-time updates
+    private var currentTag: NFCTag? {
+        appState.registeredTags.first(where: { $0.id == tag.id })
+    }
+    
+    // Check if this tag is currently active
+    private var isTagActive: Bool {
+        currentTag?.isActive ?? false
+    }
+    
+    // Can only edit when tag is NOT active
+    private var canEdit: Bool {
+        !isTagActive
+    }
+    
     var body: some View {
         ZStack {
             PauseColors.background
@@ -55,6 +70,8 @@ struct TagDetailView: View {
                     isEditing.toggle()
                 }
                 .foregroundColor(PauseColors.accent)
+                .disabled(!canEdit)
+                .opacity(canEdit ? 1.0 : 0.6)
             }
         }
         .familyActivityPicker(
@@ -184,13 +201,40 @@ struct TagDetailView: View {
                 .padding(Spacing.lg)
             }
             .buttonStyle(PlainButtonStyle())
+            .disabled(!canEdit)
+            .opacity(canEdit ? 1.0 : 0.6)
+            
+            // Warning when tag is active
+            if !canEdit {
+                Divider()
+                    .background(PauseColors.cardBorder)
+                
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: FontSize.base))
+                        .foregroundColor(PauseColors.warning)
+                    
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text("Tag ist aktiv")
+                            .font(.system(size: FontSize.sm, weight: .medium))
+                            .foregroundColor(PauseColors.warning)
+                        
+                        Text("Du kannst Apps nicht ändern, während der Tag aktiv ist und Apps blockiert.")
+                            .font(.system(size: FontSize.xs))
+                            .foregroundColor(PauseColors.secondaryText)
+                    }
+                }
+                .padding(Spacing.lg)
+            }
             
             // Footer
-            Text("Wähle die Apps aus, die bei Aktivierung dieses Tags blockiert werden sollen.")
-                .font(.system(size: FontSize.sm))
-                .foregroundColor(PauseColors.tertiaryText)
-                .padding(.horizontal, Spacing.lg)
-                .padding(.bottom, Spacing.lg)
+            if canEdit {
+                Text("Wähle die Apps aus, die bei Aktivierung dieses Tags blockiert werden sollen.")
+                    .font(.system(size: FontSize.sm))
+                    .foregroundColor(PauseColors.tertiaryText)
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.bottom, Spacing.lg)
+            }
         }
         .card()
     }

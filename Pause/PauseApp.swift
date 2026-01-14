@@ -11,6 +11,11 @@ import SwiftUI
 struct PauseApp: App {
     @StateObject private var appState = AppState.shared
     
+    init() {
+        // Initialize TimeProfileController to start monitoring
+        _ = TimeProfileController.shared
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()

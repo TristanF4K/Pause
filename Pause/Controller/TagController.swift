@@ -8,6 +8,23 @@
 import Foundation
 import FamilyControls
 
+/// Result of a tag scan operation
+enum TagScanResult {
+    case success(tag: NFCTag, wasActivated: Bool)
+    case notRegistered
+    case noAppsLinked(tagName: String)
+    case blockedByOtherTag(activeTagName: String, attemptedTagName: String)
+    case blockedByTimeProfile(profileName: String, attemptedTagName: String)
+    case failed
+    
+    var isSuccess: Bool {
+        if case .success = self {
+            return true
+        }
+        return false
+    }
+}
+
 @MainActor
 class TagController {
     static let shared = TagController()
@@ -31,6 +48,12 @@ class TagController {
     // MARK: - Modern API with FamilyActivitySelection
     
     func linkAppsToTag(tag: NFCTag, selection: FamilyActivitySelection) {
+        // SECURITY: Cannot change app selection while tag is currently active
+        if tag.isActive {
+            print("🚫 Cannot change app selection while tag is active")
+            return
+        }
+        
         // Store selection in SelectionManager
         selectionManager.setSelection(selection, for: tag.id)
         
@@ -49,7 +72,7 @@ class TagController {
         appState.updateTag(updatedTag)
     }
     
-    func handleTagScan(identifier: String) {
+    func handleTagScan(identifier: String) async -> TagScanResult {
         print("🏷️ TagController: handleTagScan called with identifier: \(identifier)")
         
         // Normalize identifier for comparison
@@ -69,7 +92,7 @@ class TagController {
             return normalizedRegisteredId == normalizedScannedId
         }) else {
             print("⚠️ TagController: No tag found with this identifier")
-            return
+            return .notRegistered
         }
         
         print("✅ TagController: Found tag '\(tag.name)' (ID: \(tag.id))")
@@ -77,47 +100,73 @@ class TagController {
         // Check if tag has apps linked
         guard selectionManager.hasSelection(for: tag.id) else {
             print("⚠️ TagController: Tag has no apps/selections configured")
-            return
+            return .noAppsLinked(tagName: tag.name)
         }
         
         let selectionInfo = selectionManager.selectionInfo(for: tag.id)
         print("   Selection: \(selectionInfo.apps) apps, \(selectionInfo.categories) categories")
         
-        // Toggle blocking state via ScreenTimeController (now async)
-        Task {
-            print("   Calling toggleBlocking...")
-            let success = await screenTimeController.toggleBlocking(for: tag.id)
-            
-            guard success else {
-                print("⚠️ TagController: toggleBlocking failed")
-                return
-            }
-            
-            print("✅ TagController: toggleBlocking succeeded")
-            
-            // Update UI state
-            var updatedTag = tag
-            updatedTag.isActive = screenTimeController.isCurrentlyBlocking && screenTimeController.activeTagID == tag.id
-            appState.updateTag(updatedTag)
-            appState.setBlockingState(isActive: updatedTag.isActive)
-            
-            print("   Updated tag state: isActive=\(updatedTag.isActive)")
-            
-            // Update active profile for UI
-            if updatedTag.isActive {
-                let profile = BlockingProfile(
-                    name: tag.name,
-                    blockedAppTokens: tag.linkedAppTokens,
-                    blockedCategoryTokens: tag.linkedCategoryTokens,
-                    isActive: true
-                )
-                appState.activeProfile = profile
-                print("   Set active profile: \(tag.name)")
-            } else {
-                appState.activeProfile = nil
-                print("   Cleared active profile")
+        // SECURITY CHECK: Prevent activating a different tag when another is active
+        if !tag.isActive && appState.hasOtherActiveTag(than: tag.id) {
+            if let activeTag = appState.getActiveTag() {
+                print("🚫 TagController: Cannot activate '\(tag.name)' - '\(activeTag.name)' is currently active")
+                return .blockedByOtherTag(activeTagName: activeTag.name, attemptedTagName: tag.name)
             }
         }
+        
+        // SECURITY CHECK: Prevent activating tag when a time profile is active
+        if !tag.isActive {
+            let activeTimeProfiles = appState.timeProfiles.filter { profile in
+                profile.isCurrentlyBlocking(appState: appState, screenTimeController: screenTimeController)
+            }
+            if let activeProfile = activeTimeProfiles.first {
+                print("🚫 TagController: Cannot activate '\(tag.name)' - Time profile '\(activeProfile.name)' is currently active")
+                return .blockedByTimeProfile(profileName: activeProfile.name, attemptedTagName: tag.name)
+            }
+        }
+        
+        // Remember the state before toggling
+        let wasActiveBefore = tag.isActive
+        
+        // Toggle blocking state via ScreenTimeController
+        print("   Calling toggleBlocking...")
+        let success = await screenTimeController.toggleBlocking(for: tag.id)
+        
+        guard success else {
+            print("⚠️ TagController: toggleBlocking failed")
+            return .failed
+        }
+        
+        print("✅ TagController: toggleBlocking succeeded")
+        
+        // Update UI state
+        var updatedTag = tag
+        updatedTag.isActive = screenTimeController.isCurrentlyBlocking && screenTimeController.activeTagID == tag.id
+        appState.updateTag(updatedTag)
+        appState.setBlockingState(isActive: updatedTag.isActive)
+        
+        print("   Updated tag state: isActive=\(updatedTag.isActive)")
+        
+        // Update active profile for UI
+        if updatedTag.isActive {
+            let profile = BlockingProfile(
+                name: tag.name,
+                blockedAppTokens: tag.linkedAppTokens,
+                blockedCategoryTokens: tag.linkedCategoryTokens,
+                isActive: true
+            )
+            appState.activeProfile = profile
+            print("   Set active profile: \(tag.name)")
+        } else {
+            appState.activeProfile = nil
+            print("   Cleared active profile")
+            
+            // IMPORTANT: After deactivating a tag, check if a time profile should take over
+            print("   Checking if time profile should activate now...")
+            TimeProfileController.shared.checkAndUpdateProfiles()
+        }
+        
+        return .success(tag: updatedTag, wasActivated: !wasActiveBefore)
     }
     
     func deleteTag(tag: NFCTag) {

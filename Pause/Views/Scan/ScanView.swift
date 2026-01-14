@@ -113,46 +113,54 @@ struct ScanView: View {
     }
     
     private func handleScannedIdentifier(_ identifier: String) {
-        // Normalize the scanned identifier
-        let normalizedScannedId = identifier.lowercased()
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: ":", with: "")
-        
-        // Check if tag is registered (with normalized comparison)
-        if let tag = appState.registeredTags.first(where: { registeredTag in
-            let normalizedRegisteredId = registeredTag.tagIdentifier.lowercased()
-                .replacingOccurrences(of: " ", with: "")
-                .replacingOccurrences(of: "-", with: "")
-                .replacingOccurrences(of: ":", with: "")
-            return normalizedRegisteredId == normalizedScannedId
-        }) {
-            // Remember the PREVIOUS state before toggling
-            let wasActiveBeforeScan = tag.isActive
+        // Get the scan result from TagController
+        Task {
+            let scanResult = await TagController.shared.handleTagScan(identifier: identifier)
             
-            // Handle registered tag - use the ORIGINAL identifier from scan for consistency
-            TagController.shared.handleTagScan(identifier: identifier)
-            
-            // Wait a moment for the async operation to complete
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                // Get updated tag after the scan
-                if let updatedTag = appState.registeredTags.first(where: { $0.id == tag.id }) {
-                    scannedTag = updatedTag
-                    // Set wasActivated based on what happened: 
-                    // If it was inactive before and is now active, it was activated
-                    wasActivated = !wasActiveBeforeScan && updatedTag.isActive
-                    
+            await MainActor.run {
+                switch scanResult {
+                case .success(let tag, let activated):
+                    scannedTag = tag
+                    self.wasActivated = activated
                     showingSuccess = true
                     
                     // Haptic feedback
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(.success)
+                    
+                case .notRegistered:
+                    errorMessage = "Dieser Tag ist nicht registriert. Bitte füge ihn zuerst in den Einstellungen hinzu."
+                    showingError = true
+                    
+                case .noAppsLinked(let tagName):
+                    errorMessage = "Der Tag '\(tagName)' hat keine Apps verknüpft. Bitte wähle zuerst Apps aus."
+                    showingError = true
+                    
+                case .blockedByOtherTag(let activeTagName, _):
+                    errorMessage = "'\(activeTagName)' ist bereits aktiv. Scanne '\(activeTagName)' zuerst, um ihn zu deaktivieren."
+                    showingError = true
+                    
+                    // Error haptic feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
+                    
+                case .blockedByTimeProfile(let profileName, _):
+                    errorMessage = "Zeitprofil '\(profileName)' ist gerade aktiv. Tags können nicht aktiviert werden, während ein Zeitprofil aktiv ist."
+                    showingError = true
+                    
+                    // Error haptic feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
+                    
+                case .failed:
+                    errorMessage = "Die Blockierung konnte nicht aktiviert/deaktiviert werden. Bitte versuche es erneut."
+                    showingError = true
+                    
+                    // Error haptic feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.error)
                 }
             }
-        } else {
-            // Tag not registered
-            errorMessage = "Dieser Tag ist nicht registriert. Bitte füge ihn zuerst in den Einstellungen hinzu."
-            showingError = true
         }
     }
 }

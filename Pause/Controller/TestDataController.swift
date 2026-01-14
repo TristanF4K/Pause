@@ -56,13 +56,28 @@ class TestDataController {
         print("🏷️ Simuliere Scan für Tag: \(tag.name)")
         
         // Use the TagController's handleTagScan method which toggles the state
-        TagController.shared.handleTagScan(identifier: tagIdentifier)
-        
-        // The log is based on the state before toggle
-        if tag.isActive {
-            print("🔓 Tag wird deaktiviert: \(tag.name)")
-        } else {
-            print("🔒 Tag wird aktiviert: \(tag.name)")
+        Task {
+            let scanResult = await TagController.shared.handleTagScan(identifier: tagIdentifier)
+            
+            // Log the result
+            switch scanResult {
+            case .success(let scannedTag, let wasActivated):
+                if wasActivated {
+                    print("🔒 Tag wurde aktiviert: \(scannedTag.name)")
+                } else {
+                    print("🔓 Tag wurde deaktiviert: \(scannedTag.name)")
+                }
+            case .notRegistered:
+                print("❌ Tag nicht registriert")
+            case .noAppsLinked:
+                print("⚠️ Tag hat keine Apps verknüpft")
+            case .blockedByOtherTag(let activeTagName, _):
+                print("🚫 Blockiert durch aktiven Tag: \(activeTagName)")
+            case .blockedByTimeProfile(let profileName, _):
+                print("🚫 Blockiert durch aktives Zeitprofil: \(profileName)")
+            case .failed:
+                print("❌ Blockierung fehlgeschlagen")
+            }
         }
     }
     
