@@ -69,10 +69,7 @@ class TagController: ObservableObject {
         return selectionManager
     }
     
-    private var timeProfile: TimeProfileController {  // ✅ ACCESSOR
-        guard let timeProfileController else {
-            fatalError("TimeProfileController not injected - check PauseApp dependency setup")
-        }
+    private var timeProfile: TimeProfileController? {  // ✅ Optional statt fatalError
         return timeProfileController
     }
     
@@ -183,16 +180,17 @@ class TagController: ObservableObject {
         
         AppLogger.tags.info("✅ toggleBlocking succeeded for tag '\(tag.name)'")
         
-        // Update UI state
+        // Determine new state based on ScreenTimeController's actual state
+        let isNowActive = screenTime.isCurrentlyBlocking && screenTime.activeTagID == tag.id
+        
+        AppLogger.tags.debug("New tag state will be: isActive=\(isNowActive)")
+        
+        // Update tag state
         var updatedTag = tag
-        updatedTag.isActive = screenTime.isCurrentlyBlocking && screenTime.activeTagID == tag.id
-        state.updateTag(updatedTag)
-        state.setBlockingState(isActive: updatedTag.isActive)
+        updatedTag.isActive = isNowActive
         
-        AppLogger.tags.debug("Updated tag state: isActive=\(updatedTag.isActive)")
-        
-        // Update active profile for UI
-        if updatedTag.isActive {
+        // Update active profile FIRST (before saving)
+        if isNowActive {
             let profile = BlockingProfile(
                 name: tag.name,
                 blockedAppTokens: tag.linkedAppTokens,
@@ -204,10 +202,18 @@ class TagController: ObservableObject {
         } else {
             state.activeProfile = nil
             AppLogger.tags.info("Cleared active profile")
-            
-            // IMPORTANT: After deactivating a tag, check if a time profile should take over
-            AppLogger.tags.debug("Checking if time profile should activate now...")
-            timeProfile.checkAndUpdateProfiles()
+        }
+        
+        // Now update tag and blocking state together (single save operation)
+        state.updateTag(updatedTag)
+        state.setBlockingState(isActive: isNowActive)
+        
+        // IMPORTANT: After deactivating a tag, check if a time profile should take over
+        // Only do this AFTER all state updates are complete
+        if !isNowActive {
+            AppLogger.tags.debug("Tag deactivated, checking if time profile should activate now...")
+            // Use optional chaining to prevent crash if timeProfileController is nil
+            timeProfileController?.checkAndUpdateProfiles()
         }
         
         return .success(tag: updatedTag, wasActivated: !wasActiveBefore)

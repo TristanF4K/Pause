@@ -190,59 +190,60 @@ struct HomeView: View {
     
     private func handleScannedIdentifier(_ identifier: String) {
         // Get the scan result from TagController
-        Task {
+        Task { @MainActor in
             let scanResult = await tagController.handleTagScan(identifier: identifier)
             
-            await MainActor.run {
-                switch scanResult {
-                case .success(let tag, let wasActivated):
-                    scannedTag = tag
-                    
-                    // Set success message based on what happened
-                    if wasActivated {
-                        successMessage = "'\(tag.name)' wurde aktiviert"
-                    } else {
-                        successMessage = "'\(tag.name)' wurde deaktiviert"
-                    }
-                    
-                    showingSuccessAlert = true
-                    
-                    // Haptic feedback
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
-                    
-                case .notRegistered:
-                    errorMessage = "Dieser Tag ist nicht registriert. Bitte füge ihn zuerst in den Einstellungen hinzu."
-                    showingErrorAlert = true
-                    
-                case .noAppsLinked(let tagName):
-                    errorMessage = "Der Tag '\(tagName)' hat keine Apps verknüpft. Bitte wähle zuerst Apps aus."
-                    showingErrorAlert = true
-                    
-                case .blockedByOtherTag(let activeTagName, _):
-                    errorMessage = "'\(activeTagName)' ist bereits aktiv. Scanne '\(activeTagName)' zuerst, um ihn zu deaktivieren."
-                    showingErrorAlert = true
-                    
-                    // Error haptic feedback
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.error)
-                    
-                case .blockedByTimeProfile(let profileName, _):
-                    errorMessage = "Zeitprofil '\(profileName)' ist gerade aktiv. Tags können nicht aktiviert werden, während ein Zeitprofil aktiv ist."
-                    showingErrorAlert = true
-                    
-                    // Error haptic feedback
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.error)
-                    
-                case .failed:
-                    errorMessage = "Die Blockierung konnte nicht aktiviert/deaktiviert werden. Bitte versuche es erneut."
-                    showingErrorAlert = true
-                    
-                    // Error haptic feedback
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.error)
+            // Force a small delay to ensure state is fully synchronized
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms delay
+            
+            switch scanResult {
+            case .success(let tag, let wasActivated):
+                scannedTag = tag
+                
+                // Set success message based on what happened
+                if wasActivated {
+                    successMessage = "'\(tag.name)' wurde aktiviert"
+                } else {
+                    successMessage = "'\(tag.name)' wurde deaktiviert"
                 }
+                
+                showingSuccessAlert = true
+                
+                // Haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                
+            case .notRegistered:
+                errorMessage = "Dieser Tag ist nicht registriert. Bitte füge ihn zuerst in den Einstellungen hinzu."
+                showingErrorAlert = true
+                
+            case .noAppsLinked(let tagName):
+                errorMessage = "Der Tag '\(tagName)' hat keine Apps verknüpft. Bitte wähle zuerst Apps aus."
+                showingErrorAlert = true
+                
+            case .blockedByOtherTag(let activeTagName, _):
+                errorMessage = "'\(activeTagName)' ist bereits aktiv. Scanne '\(activeTagName)' zuerst, um ihn zu deaktivieren."
+                showingErrorAlert = true
+                
+                // Error haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+                
+            case .blockedByTimeProfile(let profileName, _):
+                errorMessage = "Zeitprofil '\(profileName)' ist gerade aktiv. Tags können nicht aktiviert werden, während ein Zeitprofil aktiv ist."
+                showingErrorAlert = true
+                
+                // Error haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+                
+            case .failed:
+                errorMessage = "Die Blockierung konnte nicht aktiviert/deaktiviert werden. Bitte versuche es erneut."
+                showingErrorAlert = true
+                
+                // Error haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
             }
         }
     }

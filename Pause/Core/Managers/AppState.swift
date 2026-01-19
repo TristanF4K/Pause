@@ -99,6 +99,7 @@ class AppState: ObservableObject {
         if let activeProfile = activeProfile {
             persistenceController.saveActiveProfile(activeProfile)
         }
+        AppLogger.general.debug("Data saved successfully")
     }
     
     func checkAuthorizationStatus() async {
@@ -136,10 +137,13 @@ class AppState: ObservableObject {
     }
     
     func updateTag(_ tag: NFCTag) {
-        if let index = registeredTags.firstIndex(where: { $0.id == tag.id }) {
-            registeredTags[index] = tag
-            saveData()
+        guard let index = registeredTags.firstIndex(where: { $0.id == tag.id }) else {
+            AppLogger.general.warning("⚠️ Attempted to update non-existent tag: \(tag.name)")
+            return
         }
+        
+        registeredTags[index] = tag
+        saveData()
     }
     
     func deleteTag(_ tag: NFCTag) {
@@ -148,9 +152,23 @@ class AppState: ObservableObject {
     }
     
     func setBlockingState(isActive: Bool) {
+        // Only update if state actually changed to prevent unnecessary saves
+        guard isBlocking != isActive else {
+            AppLogger.general.debug("Blocking state unchanged (\(isActive)), skipping update")
+            return
+        }
+        
         isBlocking = isActive
-        activeProfile?.isActive = isActive
+        
+        // Safely update activeProfile if it exists
+        if var profile = activeProfile {
+            profile.isActive = isActive
+            activeProfile = profile
+        }
+        
         saveData()
+        
+        AppLogger.general.info("Blocking state updated to: \(isActive)")
     }
     
     /// Returns the currently active tag, if any

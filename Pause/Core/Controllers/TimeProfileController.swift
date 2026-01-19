@@ -215,6 +215,12 @@ class TimeProfileController: ObservableObject {
     func checkAndUpdateProfiles() {
         AppLogger.timeProfiles.debug("⏰ Checking profiles")
         
+        // Safety check: ensure dependencies are available
+        guard let _ = appState, let _ = screenTimeController else {
+            AppLogger.timeProfiles.warning("⚠️ Dependencies not available, skipping profile check")
+            return
+        }
+        
         let now = Date()
         let activeProfiles = self.state.timeProfiles.filter { $0.isActiveAt(now) }
         

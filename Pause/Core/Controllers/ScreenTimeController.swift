@@ -233,21 +233,27 @@ class ScreenTimeController: ObservableObject {
     func unblockAll() {
         AppLogger.screenTime.info("unblockAll called")
         
-        // 1. Use SelectionManager's deactivation (which clears the named blocking store)
-        guard let manager = selectionManager else {
-            AppLogger.screenTime.error("❌ SelectionManager not injected")
-            return
+        // 1. First update our state to prevent re-entry issues
+        let wasBlocking = isCurrentlyBlocking
+        let previousTagID = activeTagID
+        
+        isCurrentlyBlocking = false
+        activeTagID = nil
+        
+        // 2. Use SelectionManager's deactivation (which clears the named blocking store)
+        if let manager = selectionManager {
+            manager.deactivateBlocking()
+        } else {
+            AppLogger.screenTime.error("❌ SelectionManager not injected, clearing stores directly")
         }
         
-        manager.deactivateBlocking()
-        
-        // 2. Also clear the main/default store to be absolutely sure
+        // 3. Also clear the main/default store to be absolutely sure
         store.shield.applications = nil
         store.shield.applicationCategories = .specific([], except: [])
         store.shield.webDomains = nil
         store.shield.webDomainCategories = .specific([], except: [])
         
-        // 3. Clear ALL other possible restrictions
+        // 4. Clear ALL other possible restrictions
         store.application.denyAppInstallation = false
         store.application.denyAppRemoval = false
         store.dateAndTime.requireAutomaticDateAndTime = false
@@ -257,15 +263,15 @@ class ScreenTimeController: ObservableObject {
         store.cellular.lockAppCellularData = false
         store.account.lockAccounts = false
         
-        // 4. Update state
-        isCurrentlyBlocking = false
-        activeTagID = nil
-        saveState() // Persist state
+        // 5. Persist state
+        saveState()
         
-        // 5. Update app state if available
-        appState?.setBlockingState(isActive: false)
+        // 6. Update app state if available (only if state actually changed)
+        if wasBlocking {
+            appState?.setBlockingState(isActive: false)
+        }
         
-        AppLogger.screenTime.info("All restrictions cleared")
+        AppLogger.screenTime.info("All restrictions cleared (was blocking: \(wasBlocking), tag: \(previousTagID?.uuidString ?? "none"))")
     }
     
     /// Block apps with a specific selection and source ID (for time profiles)
