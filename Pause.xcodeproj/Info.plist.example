@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- ... Existing keys ... -->
+    
+    <!-- Background Task Identifiers für Zeitprofile -->
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.pause.timeprofile.check</string>
+    </array>
+    
+    <!-- Background Modes für Background Execution -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>processing</string>
+    </array>
+    
+    <!-- Privacy - User Notifications Usage Description -->
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Pause. benötigt Benachrichtigungen, um dich zu informieren, wenn ein Zeitprofil automatisch aktiviert wird.</string>
+    
+    <!-- ... Other existing keys ... -->
+</dict>
+</plist>

@@ -9,6 +9,8 @@ import Foundation
 import FamilyControls
 import Combine
 import OSLog
+import BackgroundTasks
+import UserNotifications
 
 class TimeProfileController: ObservableObject {
     // Injected dependencies
@@ -22,6 +24,9 @@ class TimeProfileController: ObservableObject {
     /// Flag to track if monitoring is active
     private var isMonitoring = false
     
+    /// Background task identifier
+    private static let backgroundTaskIdentifier = "com.pause.timeprofile.check"
+    
     // Public initializer for DI
     init(appState: AppState? = nil,
          screenTimeController: ScreenTimeController? = nil,
@@ -32,7 +37,17 @@ class TimeProfileController: ObservableObject {
         
         // Don't start monitoring immediately - wait until there are enabled profiles
         Task { @MainActor in
+            // Request notification permissions
+            await requestNotificationPermissions()
+            
+            // Register background task
+            registerBackgroundTask()
+            
+            // Start monitoring
             startMonitoringIfNeeded()
+            
+            // Schedule initial background refresh
+            scheduleBackgroundRefresh()
         }
     }
     
@@ -62,6 +77,109 @@ class TimeProfileController: ObservableObject {
     deinit {
         checkTimer?.invalidate()
         checkTimer = nil
+    }
+    
+    // MARK: - Background Tasks & Notifications
+    
+    /// Request notification permissions for time profile alerts
+    private func requestNotificationPermissions() async {
+        let center = UNUserNotificationCenter.current()
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            if granted {
+                AppLogger.timeProfiles.info("✅ Notification permissions granted")
+            } else {
+                AppLogger.timeProfiles.warning("⚠️ Notification permissions denied")
+            }
+        } catch {
+            AppLogger.timeProfiles.error("❌ Failed to request notification permissions: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Register the background task for time profile checking
+    private func registerBackgroundTask() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.backgroundTaskIdentifier,
+            using: nil
+        ) { task in
+            self.handleBackgroundTask(task: task as! BGAppRefreshTask)
+        }
+        
+        AppLogger.timeProfiles.info("✅ Background task registered")
+    }
+    
+    /// Schedule the next background refresh
+    private func scheduleBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundTaskIdentifier)
+        
+        // Schedule to run in 15 minutes (minimum iOS allows)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            AppLogger.timeProfiles.info("✅ Background refresh scheduled for next 15 minutes")
+        } catch {
+            AppLogger.timeProfiles.error("❌ Failed to schedule background refresh: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Handle background task execution
+    private func handleBackgroundTask(task: BGAppRefreshTask) {
+        AppLogger.timeProfiles.info("⏰ Background task executing")
+        
+        // Schedule the next refresh immediately
+        scheduleBackgroundRefresh()
+        
+        // Perform profile check with timeout
+        Task { @MainActor in
+            await self.checkAndUpdateProfilesBackground()
+            task.setTaskCompleted(success: true)
+        }
+        
+        // Set expiration handler
+        task.expirationHandler = {
+            AppLogger.timeProfiles.warning("⚠️ Background task expired")
+            task.setTaskCompleted(success: false)
+        }
+    }
+    
+    /// Schedule local notifications for upcoming time profiles
+    @MainActor
+    private func scheduleNotificationsForProfiles() {
+        let center = UNUserNotificationCenter.current()
+        
+        // Remove all pending notifications first
+        center.removeAllPendingNotificationRequests()
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        for profile in state.timeProfiles where profile.isEnabled {
+            // Find the next activation time for this profile
+            if let nextActivationDate = profile.schedule.nextActivationDate(after: now) {
+                let content = UNMutableNotificationContent()
+                content.title = "Zeitprofil aktiviert"
+                content.body = "'\(profile.name)' wurde automatisch aktiviert"
+                content.sound = .default
+                
+                let triggerDate = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: nextActivationDate)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
+                
+                let request = UNNotificationRequest(
+                    identifier: "timeprofile-\(profile.id.uuidString)",
+                    content: content,
+                    trigger: trigger
+                )
+                
+                center.add(request) { error in
+                    if let error = error {
+                        AppLogger.timeProfiles.error("❌ Failed to schedule notification: \(error.localizedDescription)")
+                    } else {
+                        AppLogger.timeProfiles.info("✅ Notification scheduled for '\(profile.name)' at \(nextActivationDate)")
+                    }
+                }
+            }
+        }
     }
     
     // MARK: - Profile Management
@@ -105,6 +223,9 @@ class TimeProfileController: ObservableObject {
         
         // Re-evaluate if any profiles should be active now
         checkAndUpdateProfiles()
+        
+        // Re-schedule notifications
+        scheduleNotificationsForProfiles()
     }
     
     @MainActor
@@ -126,6 +247,9 @@ class TimeProfileController: ObservableObject {
         
         // Start or stop monitoring based on whether any profiles are enabled
         startMonitoringIfNeeded()
+        
+        // Re-schedule notifications
+        scheduleNotificationsForProfiles()
     }
     
     @MainActor
@@ -192,6 +316,9 @@ class TimeProfileController: ObservableObject {
         // Check immediately
         checkAndUpdateProfiles()
         
+        // Schedule notifications for upcoming activations
+        scheduleNotificationsForProfiles()
+        
         // Check every 5 seconds for responsive activation/deactivation
         // This ensures profiles activate/deactivate within seconds of the scheduled time
         checkTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -199,6 +326,9 @@ class TimeProfileController: ObservableObject {
                 self?.checkAndUpdateProfiles()
             }
         }
+        
+        // Schedule background refresh
+        scheduleBackgroundRefresh()
         
         AppLogger.timeProfiles.debug("Timer scheduled to check every 5 seconds")
     }
@@ -261,6 +391,13 @@ class TimeProfileController: ObservableObject {
                 AppLogger.timeProfiles.debug("ℹ️ No active profiles and nothing to deactivate")
             }
         }
+    }
+    
+    /// Check profiles in background (same logic but logs background context)
+    @MainActor
+    private func checkAndUpdateProfilesBackground() async {
+        AppLogger.timeProfiles.info("🌙 Background check started")
+        checkAndUpdateProfiles()
     }
     
     // MARK: - Activation/Deactivation

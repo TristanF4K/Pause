@@ -5,6 +5,9 @@
       location = "self:">
    </FileRef>
    <FileRef
-      location = "group:NAMING_CONSISTENCY_FIXED.md">
+      location = "group:BACKGROUND_TASKS_SETUP.md">
+   </FileRef>
+   <FileRef
+      location = "group:Info.plist.example">
    </FileRef>
 </Workspace>

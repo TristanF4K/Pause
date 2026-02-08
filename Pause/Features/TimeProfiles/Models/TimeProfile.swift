@@ -99,6 +99,43 @@ struct TimeSchedule: Codable, Hashable {
         // Note: endTime is EXCLUSIVE (profile ends at endTime, not including endTime)
         return currentTime >= startTime && currentTime < endTime
     }
+    
+    /// Find the next activation date/time after the given date
+    func nextActivationDate(after date: Date) -> Date? {
+        guard !selectedWeekdays.isEmpty else { return nil }
+        
+        let calendar = Calendar.current
+        
+        // Check each of the next 7 days
+        for daysAhead in 0..<7 {
+            guard let checkDate = calendar.date(byAdding: .day, value: daysAhead, to: date) else { continue }
+            
+            let weekdayComponent = calendar.component(.weekday, from: checkDate)
+            guard let weekday = Weekday(calendarWeekday: weekdayComponent),
+                  selectedWeekdays.contains(weekday) else {
+                continue
+            }
+            
+            // Create the activation date with start time
+            var components = calendar.dateComponents([.year, .month, .day], from: checkDate)
+            components.hour = startTime.hour
+            components.minute = startTime.minute
+            components.second = 0
+            
+            guard let activationDate = calendar.date(from: components) else { continue }
+            
+            // If this is today, check if the start time hasn't passed yet
+            if daysAhead == 0 {
+                if activationDate > date {
+                    return activationDate
+                }
+            } else {
+                return activationDate
+            }
+        }
+        
+        return nil
+    }
 }
 
 /// Represents a day of the week

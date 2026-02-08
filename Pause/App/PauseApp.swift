@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import BackgroundTasks
 
 @main
 struct PauseApp: App {
@@ -62,6 +63,10 @@ struct PauseApp: App {
                 .environmentObject(selectionManager)
                 .environmentObject(tagController)
                 .environmentObject(timeProfileController)
+                .onAppear {
+                    // Check profiles when app comes to foreground
+                    timeProfileController.checkAndUpdateProfiles()
+                }
         }
     }
 }
